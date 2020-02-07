@@ -1,0 +1,1035 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Hibersoft - Mine Deck simulation</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+    <link type="text/css" rel="stylesheet" href="styles/main.css">
+    <style>
+        body {
+            background-color: #cce0ff;
+            color: #000;
+        }
+        a {
+            color: #080;
+        }
+    </style>
+</head>
+
+<body>
+<div id="info">Simple Mine Deck Simulation<br/>
+</div>
+
+<script type="module">
+
+    import * as THREE from '../three.js-master/build/three.module.js';
+
+    import Stats from '../three.js-master/examples/jsm/libs/stats.module.js';
+    import { GUI } from '../three.js-master/examples/jsm/libs/dat.gui.module.js';
+
+    import { OrbitControls } from '../three.js-master/examples/jsm/controls/OrbitControls.js';
+
+    /*
+     * Cloth Simulation using a relaxed constraints solver
+     */
+
+    // Suggested Readings
+
+    // Advanced Character Physics by Thomas Jakobsen Character
+    // http://freespace.virgin.net/hugo.elias/models/m_cloth.htm
+    // http://en.wikipedia.org/wiki/Cloth_modeling
+    // http://cg.alexandra.dk/tag/spring-mass-system/
+    // Real-time Cloth Animation http://www.darwin3d.com/gamedev/articles/col0599.pdf
+
+    var columns = 6; // left to right
+    var rows = 5; // top to bottom
+
+    var params = {
+        columns: 6,
+        rows: 5,
+        enableWind: true,
+        showBall: true,
+        tooglePins: togglePins
+    };
+
+    // moving poles' x by 1000
+    var move_x = 1000;
+
+    var DAMPING = 0.03;
+    var DRAG = 1 - DAMPING;
+    var MASS = 0.1;
+    var restDistance = 25;
+
+    var xSegs = 10;
+    var ySegs = 10;
+
+    var clothFunction = plane( restDistance * xSegs, restDistance * ySegs );
+
+    var cloth = new Cloth( xSegs, ySegs );
+
+    var GRAVITY = 981 * 1.4;
+    var gravity = new THREE.Vector3( 0, - GRAVITY, 0 ).multiplyScalar( MASS );
+
+
+    var TIMESTEP = 18 / 1000;
+    var TIMESTEP_SQ = TIMESTEP * TIMESTEP;
+
+    var pins = [];
+
+    var windForce = new THREE.Vector3( 0, 0, 0 );
+
+    var ballPosition = new THREE.Vector3( 0, - 45, 0 );
+    var ballSize = 60; //40
+
+    var tmpForce = new THREE.Vector3();
+
+    var lastTime;
+
+
+    function plane( width, height ) {
+
+        return function ( u, v, target ) {
+
+            var x = ( u - 0.5 ) * width;
+            var y = ( v + 0.5 ) * height;
+            var z = 0;
+
+            target.set( x, y, z );
+
+        };
+
+    }
+
+    function Particle( x, y, z, mass ) {
+
+        this.position = new THREE.Vector3();
+        this.previous = new THREE.Vector3();
+        this.original = new THREE.Vector3();
+        this.a = new THREE.Vector3( 0, 0, 0 ); // acceleration
+        this.mass = mass;
+        this.invMass = 1 / mass;
+        this.tmp = new THREE.Vector3();
+        this.tmp2 = new THREE.Vector3();
+
+        // init
+
+        clothFunction( x, y, this.position ); // position
+        clothFunction( x, y, this.previous ); // previous
+        clothFunction( x, y, this.original );
+
+    }
+
+    // Force -> Acceleration
+
+    Particle.prototype.addForce = function ( force ) {
+
+        this.a.add(
+            this.tmp2.copy( force ).multiplyScalar( this.invMass )
+        );
+
+    };
+
+
+    // Performs Verlet integration
+
+    Particle.prototype.integrate = function ( timesq ) {
+
+        var newPos = this.tmp.subVectors( this.position, this.previous );
+        newPos.multiplyScalar( DRAG ).add( this.position );
+        newPos.add( this.a.multiplyScalar( timesq ) );
+
+        this.tmp = this.previous;
+        this.previous = this.position;
+        this.position = newPos;
+
+        this.a.set( 0, 0, 0 );
+
+    };
+
+
+    var diff = new THREE.Vector3();
+
+    function satisfyConstraints( p1, p2, distance ) {
+
+        diff.subVectors( p2.position, p1.position );
+        var currentDist = diff.length();
+        if ( currentDist === 0 ) return; // prevents division by 0
+        var correction = diff.multiplyScalar( 1 - distance / currentDist );
+        var correctionHalf = correction.multiplyScalar( 0.5 );
+        p1.position.add( correctionHalf );
+        p2.position.sub( correctionHalf );
+
+    }
+
+
+    function Cloth( w, h ) {
+
+        w = w || 10;
+        h = h || 10;
+        this.w = w;
+        this.h = h;
+
+        var particles = [];
+        var constraints = [];
+
+        var u, v;
+
+        // Create particles
+        for ( v = 0; v <= h; v ++ ) {
+
+            for ( u = 0; u <= w; u ++ ) {
+
+                particles.push(
+                    new Particle( u / w, v / h, 0, MASS )
+                );
+
+            }
+
+        }
+
+        // Structural
+
+        for ( v = 0; v < h; v ++ ) {
+
+            for ( u = 0; u < w; u ++ ) {
+
+                constraints.push( [
+                    particles[ index( u, v ) ],
+                    particles[ index( u, v + 1 ) ],
+                    restDistance
+                ] );
+
+                constraints.push( [
+                    particles[ index( u, v ) ],
+                    particles[ index( u + 1, v ) ],
+                    restDistance
+                ] );
+
+            }
+
+        }
+
+        for ( u = w, v = 0; v < h; v ++ ) {
+
+            constraints.push( [
+                particles[ index( u, v ) ],
+                particles[ index( u, v + 1 ) ],
+                restDistance
+
+            ] );
+
+        }
+
+        for ( v = h, u = 0; u < w; u ++ ) {
+
+            constraints.push( [
+                particles[ index( u, v ) ],
+                particles[ index( u + 1, v ) ],
+                restDistance
+            ] );
+
+        }
+
+
+        // While many systems use shear and bend springs,
+        // the relaxed constraints model seems to be just fine
+        // using structural springs.
+        // Shear
+        // var diagonalDist = Math.sqrt(restDistance * restDistance * 2);
+
+
+        // for (v=0;v<h;v++) {
+        // 	for (u=0;u<w;u++) {
+
+        // 		constraints.push([
+        // 			particles[index(u, v)],
+        // 			particles[index(u+1, v+1)],
+        // 			diagonalDist
+        // 		]);
+
+        // 		constraints.push([
+        // 			particles[index(u+1, v)],
+        // 			particles[index(u, v+1)],
+        // 			diagonalDist
+        // 		]);
+
+        // 	}
+        // }
+
+
+        this.particles = particles;
+        this.constraints = constraints;
+
+        function index( u, v ) {
+
+            return u + v * ( w + 1 );
+
+        }
+
+        this.index = index;
+
+    }
+
+    function simulate( time ) {
+
+        if ( ! lastTime ) {
+
+            lastTime = time;
+            return;
+        }
+
+        var i, j, il, particles, particle, constraints, constraint;
+
+        // Aerodynamics forces
+
+        if ( params.enableWind ) {
+
+            var indx;
+            var normal = new THREE.Vector3();
+            var indices = clothGeometry.index;
+            var normals = clothGeometry.attributes.normal;
+
+            particles = cloth.particles;
+
+            for ( i = 0, il = indices.count; i < il; i += 3 ) {
+
+                for ( j = 0; j < 3; j ++ ) {
+
+                    indx = indices.getX( i + j );
+                    normal.fromBufferAttribute( normals, indx );
+                    tmpForce.copy( normal ).normalize().multiplyScalar( normal.dot( windForce ) );
+                    particles[ indx ].addForce( tmpForce );
+
+                }
+
+            }
+
+        }
+
+        for ( particles = cloth.particles, i = 0, il = particles.length; i < il; i ++ ) {
+
+            particle = particles[ i ];
+            particle.addForce( gravity );
+
+            particle.integrate( TIMESTEP_SQ );
+
+        }
+
+        // Start Constraints
+
+        constraints = cloth.constraints;
+        il = constraints.length;
+
+        for ( i = 0; i < il; i ++ ) {
+
+            constraint = constraints[ i ];
+            satisfyConstraints( constraint[ 0 ], constraint[ 1 ], constraint[ 2 ] );
+
+        }
+
+        // Ball Constraints
+
+        ballPosition.z = - Math.sin( Date.now() / 600 ) * 90; //+ 40;
+        ballPosition.x = Math.cos( Date.now() / 400 ) * 70 + move_x;
+
+        if ( params.showBall ) {
+
+            sphere.visible = true;
+
+            for ( particles = cloth.particles, i = 0, il = particles.length; i < il; i ++ ) {
+
+                particle = particles[ i ];
+                var pos = particle.position;
+                diff.subVectors( pos, ballPosition );
+                if ( diff.length() < ballSize ) {
+
+                    // collided
+                    diff.normalize().multiplyScalar( ballSize );
+                    pos.copy( ballPosition ).add( diff );
+
+                }
+
+            }
+
+        } else {
+
+            sphere.visible = false;
+
+        }
+
+
+        // Floor Constraints
+
+        for ( particles = cloth.particles, i = 0, il = particles.length; i < il; i ++ ) {
+
+            particle = particles[ i ];
+            pos = particle.position;
+            if ( pos.y < - 250 ) {
+
+                pos.y = - 250;
+
+            }
+
+        }
+
+        // Pin Constraints
+
+        for ( i = 0, il = pins.length; i < il; i ++ ) {
+
+            var xy = pins[ i ];
+            var p = particles[ xy ];
+            p.position.copy( p.original );
+            p.previous.copy( p.original );
+
+        }
+
+
+    }
+
+    /* testing cloth simulation */
+
+    var pinsFormation = [];
+    var pins = [ 6 ];
+
+    pinsFormation.push( pins );
+
+    pins = [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 ];
+    pinsFormation.push( pins );
+
+    pins = [ 0 ];
+    pinsFormation.push( pins );
+
+    pins = []; // cut the rope ;)
+    pinsFormation.push( pins );
+
+    pins = [ 0, cloth.w ]; // classic 2 pins
+    pinsFormation.push( pins );
+
+    pins = pinsFormation[ 1 ];
+
+    function togglePins() {
+
+        pins = pinsFormation[ ~ ~ ( Math.random() * pinsFormation.length ) ];
+
+    }
+
+    var container, stats;
+    var camera, scene, renderer;
+
+    var clothGeometry;
+    var sphere;
+    var object;
+    var boms = [];
+
+    init();
+    animate();
+
+    function init() {
+
+        container = document.createElement( 'div' );
+        document.body.appendChild( container );
+
+        // scene
+
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color( 0xcce0ff );
+        scene.fog = new THREE.Fog( 0xcce0ff, 500, 10000 );
+
+        // camera
+
+        camera = new THREE.PerspectiveCamera( 30, window.innerWidth / window.innerHeight, 1, 10000 );
+        camera.position.set( 1000, 50, 1500 );
+
+        light();
+        clothHang();
+        ball();
+        ground();
+        poles();
+        deck();
+
+
+        // renderer
+
+        renderer = new THREE.WebGLRenderer( { antialias: true } );
+        renderer.setPixelRatio( window.devicePixelRatio );
+        renderer.setSize( window.innerWidth, window.innerHeight );
+
+        container.appendChild( renderer.domElement );
+
+        renderer.outputEncoding = THREE.sRGBEncoding;
+
+        renderer.shadowMap.enabled = true;
+
+        // controls
+        var controls = new OrbitControls( camera, renderer.domElement );
+        controls.maxPolarAngle = Math.PI * 0.5;
+        controls.minDistance = 1000;
+        controls.maxDistance = 5000;
+
+        // performance monitor
+
+        stats = new Stats();
+        container.appendChild( stats.dom );
+
+        //
+
+        window.addEventListener( 'resize', onWindowResize, false );
+
+        //
+
+        var gui = new GUI();
+        gui.add( params, 'columns', 2, 30  ).step(1 ).onChange( function ( value ) {
+            columns = value;
+            boms.forEach(bom => {scene.remove( bom)});
+            deck();
+            renderer.render( scene, camera );
+        } );
+        gui.add( params, 'rows', 2, 20 ).step(1).onChange( function ( value ) {
+            rows = value;
+            boms.forEach(bom => {scene.remove( bom)});
+            deck();
+            renderer.render( scene, camera );
+        } );
+        gui.add( params, 'enableWind' );
+        gui.add( params, 'showBall' );
+        gui.add( params, 'tooglePins' );
+
+    }
+
+    function light(){
+        // lights
+
+        scene.add( new THREE.AmbientLight( 0x666666 ) );
+
+        var light = new THREE.DirectionalLight( 0xdfebff, 1 );
+        light.position.set( 50 , 200, 100 );
+        light.position.multiplyScalar( 1.3 );
+
+        light.castShadow = true;
+
+        light.shadow.mapSize.width = 1024;
+        light.shadow.mapSize.height = 1024;
+
+        var d = 300 + move_x;
+
+        light.shadow.camera.left = - d;
+        light.shadow.camera.right = d;
+        light.shadow.camera.top = d;
+        light.shadow.camera.bottom = - d;
+
+        light.shadow.camera.far = 1000;
+
+        scene.add( light );
+    }
+
+    function poles(){
+        // poles
+        var poleGeo = new THREE.BoxBufferGeometry( 5, 375, 5 );
+        var poleMat = new THREE.MeshLambertMaterial();
+
+        var mesh = new THREE.Mesh( poleGeo, poleMat );
+        mesh.position.x = - 125 + move_x;
+        mesh.position.y = - 62;
+        mesh.receiveShadow = true;
+        mesh.castShadow = true;
+        scene.add( mesh );
+
+        var mesh = new THREE.Mesh( poleGeo, poleMat );
+        mesh.position.x = 125 + move_x;
+        mesh.position.y = - 62;
+        mesh.receiveShadow = true;
+        mesh.castShadow = true;
+        scene.add( mesh );
+
+        var mesh = new THREE.Mesh( new THREE.BoxBufferGeometry( 255, 5, 5 ), poleMat );
+        mesh.position.y = - 250 + ( 750 / 2 );
+        mesh.position.x = 0  + move_x;
+        mesh.receiveShadow = true;
+        mesh.castShadow = true;
+        scene.add( mesh );
+
+        var gg = new THREE.BoxBufferGeometry( 10, 10, 10 );
+        var mesh = new THREE.Mesh( gg, poleMat );
+        mesh.position.y = - 250;
+        mesh.position.x = 125  + move_x;
+        mesh.receiveShadow = true;
+        mesh.castShadow = true;
+        scene.add( mesh );
+
+        var mesh = new THREE.Mesh( gg, poleMat );
+        mesh.position.y = - 250;
+        mesh.position.x = - 125  + move_x;
+        mesh.receiveShadow = true;
+        mesh.castShadow = true;
+        scene.add( mesh );
+    }
+
+    function deck(){
+
+        var column_inc = 50; // x inc
+        var row_inc = -100; // z inc
+
+        // discharge - most left in the diagram and column
+        var discharge_x = -1000;
+        var discharge_y = -100;
+        var discharge_z = 550;
+        for(var d=0; d < columns; d++)
+        {
+            bom('9', discharge_x, discharge_y, discharge_z);
+            discharge_x = discharge_x + column_inc;
+        }
+
+        // wedge bracket, wedge and side slates on top (left in the grid) and bottom (right)
+        var wedge_bracket_x = -1025;
+        var wedge_bracket_y = -95;
+        var wedge_bracket_z = 520;
+
+        var wedge_x = -1020;
+        var wedge_y = -95;
+        var wedge_z = 525;
+
+        var side_slat_x = -1016;
+        var side_slat_y = -95;
+        var side_slat_z = 500;
+
+        var most_right_x = column_inc * columns;
+
+        for(var r=0; r < rows; r++)
+        {
+            bom('1', wedge_bracket_x, wedge_bracket_y, wedge_bracket_z); // left wedge bracket
+            bom('2', wedge_x, wedge_y, wedge_z); // left wedge
+            bom('3', side_slat_x, side_slat_y, side_slat_z); // left side slat
+
+            bom('1', wedge_bracket_x + most_right_x + 5 , wedge_bracket_y, wedge_bracket_z); // right wedge bracket
+            bom('2', wedge_x + most_right_x - 5, wedge_y, wedge_z); // right wedge
+            bom('3', side_slat_x + most_right_x - 15, side_slat_y, side_slat_z); // right side slat
+
+            wedge_bracket_z = wedge_bracket_z + row_inc;
+            wedge_z = wedge_z + row_inc;
+            side_slat_z = side_slat_z + row_inc;
+        }
+
+        // modules
+        var cross_dam_x = -1000;
+        var cross_dam_y = -95;
+        var cross_dam_z = 536;
+
+        var panel_x = -1000;
+        var panel_y = -100;
+        var panel_z = 500;
+
+        var fixing_rail_x = -990;
+        var fixing_rail_y = -110;
+        var fixing_rail_z = 500;
+
+        var central_prot_cover_x = -990;
+        var central_prot_cover_y = -120;
+        var central_prot_cover_z = 500;
+
+        var locking_strip_x = -990;
+        var locking_strip_y = -90;
+        var locking_strip_z = 500;
+
+        for(var c=0; c < columns; c++){
+            cross_dam_z = 536;
+            panel_z = 500;
+            fixing_rail_z = 500;
+            central_prot_cover_z = 500;
+            locking_strip_z = 500;
+
+            for(var r=0; r < rows; r++)
+            {
+                bom('4', cross_dam_x, cross_dam_y, cross_dam_z); // cross dam
+                bom('5', panel_x, panel_y, panel_z); // panel
+                bom('6', fixing_rail_x, fixing_rail_y, fixing_rail_z); // fixing rail
+                bom('7', central_prot_cover_x, central_prot_cover_y, central_prot_cover_z); // Central Prot Cover
+                bom('8', locking_strip_x, locking_strip_y, locking_strip_z); // locking strip
+                cross_dam_z = cross_dam_z + row_inc;
+                panel_z = panel_z + row_inc;
+                fixing_rail_z = fixing_rail_z + row_inc;
+                central_prot_cover_z = central_prot_cover_z + row_inc;
+                locking_strip_z = locking_strip_z + row_inc;
+            }
+            cross_dam_x = cross_dam_x + column_inc;
+            panel_x = panel_x + column_inc;
+            fixing_rail_x = fixing_rail_x + column_inc;
+            central_prot_cover_x = central_prot_cover_x + column_inc;
+            locking_strip_x = locking_strip_x + column_inc;
+        }
+
+    }
+
+    function panel(position_x, position_y){
+        var loader = new THREE.TextureLoader();
+        var panelTexture = loader.load('textures/images/module.jpg');
+        panelTexture.anisotropy = 16;
+
+        var panelMaterial = new THREE.MeshLambertMaterial( {
+            map: panelTexture,
+            side: THREE.FrontSide,
+            alphaTest: 0.5
+        } );
+
+        var panelGeometry = new THREE.BoxBufferGeometry( 176, 0, 80 );
+
+        var mesh = new THREE.Mesh(panelGeometry, panelMaterial);
+        mesh.position.x = position_x;
+        mesh.position.y = position_y;
+        mesh.receiveShadow = true;
+        mesh.castShadow = true;
+        scene.add( mesh );
+    }
+
+    function bom(bom_cat, position_x, position_y, position_z){
+        var loader = new THREE.TextureLoader();
+        var bomTexture;
+        var bomGeometry;
+        var title;
+
+
+        switch (bom_cat) {
+            case '1':
+                // Left Wedge Bracket
+                bomTexture = loader.load('textures/images/wedge_bracket.png');
+                bomGeometry = new THREE.BoxBufferGeometry( 0, 6, 10 );
+                title = "Left Wedge Bracket";
+                break;
+            case '2':
+                // Left Wedge
+                bomTexture = loader.load('textures/images/wedge.png');
+                bomGeometry = new THREE.BoxBufferGeometry(0, 6, 15 );
+                title = "Left Wedge";
+                break;
+
+            case '3':
+                // Left Side Slat
+                bomTexture = loader.load('textures/images/side_slat.png');
+                bomGeometry = new THREE.BoxBufferGeometry(0, 10, 70);
+                title = "Left Side Slat";
+                break;
+
+            case '4':
+                // Cross Dam - 60px
+                bomTexture = loader.load('textures/images/cross_dam.png');
+                bomGeometry = new THREE.BoxBufferGeometry( 30, 10, 0 );
+                title = "Cross Dam";
+
+                break;
+
+            case '5':
+                // Module - 70px
+                bomTexture = loader.load('textures/images/module.jpg');
+                bomGeometry = new THREE.BoxBufferGeometry( 30, 0, 70 );
+                title = "Module";
+
+                break;
+
+            case '6':
+                // Fixing Rail - 10px
+                bomTexture = loader.load('textures/images/fixing_rail.png');
+                bomGeometry = new THREE.BoxBufferGeometry( 5, 2, 70 );
+                title = "Fixing Rail";
+
+                break;
+
+            case '7':
+                // Central Protection Cover - 10px
+                bomTexture = loader.load('textures/images/center_prot_cover.png');
+                bomGeometry = new THREE.BoxBufferGeometry( 5, 2, 70 );
+                title = "Central Protection Cover";
+
+                break;
+
+            case '8':
+                // Locking Strip - 10px
+                bomTexture = loader.load('textures/images/locking_strip.png');
+                bomGeometry = new THREE.BoxBufferGeometry( 5, 2, 70 );
+                title = "Locking Strip";
+
+                break;
+
+            case '9':
+                // Discharge - 36px
+                bomTexture = loader.load('textures/images/disch.png');
+                bomGeometry = new THREE.BoxBufferGeometry(30, 0, 20 );
+                title = "Discharge";
+
+                break;
+
+            case '10':
+                // Discharge Lock - 15px
+                bomTexture = loader.load('textures/images/lock.png');
+                bomGeometry = new THREE.BoxBufferGeometry( 176, 0, 6 );
+                title = "Discharge Lock";
+
+                break;
+
+            case '11':
+                // Right Side Slate - 7px
+                bomTexture = loader.load('textures/images/side_slat.png');
+                bomGeometry = new THREE.BoxBufferGeometry( 176, 0, 6 );
+                title = "Right Side Slate";
+
+                break;
+
+            case '12':
+                // Right Wedge -  6px
+                bomTexture = loader.load('textures/images/wedge.png');
+                bomGeometry = new THREE.BoxBufferGeometry( 176, 0, 6 );
+                title = "Right Wedge";
+
+                break;
+
+            case '13':
+                // Right Wedge Bracket - 6px
+                bomTexture = loader.load('textures/images/wedge_bracket.png');
+                bomGeometry = new THREE.BoxBufferGeometry( 176, 0, 6 );
+                title = "Right Wedge Bracket";
+
+                break;
+
+            case '14':
+                // Left side Protection cover - 7px
+                bomTexture = loader.load('textures/images/side_prot_cover.png');
+                bomGeometry = new THREE.BoxBufferGeometry( 176, 0, 6 );
+                title = "Left Side Protection Cover";
+
+                break;
+
+            case '15':
+                // Right Side Protection cover - 7px
+
+                bomTexture = loader.load('textures/images/side_prot_cover.png');
+                bomGeometry = new THREE.BoxBufferGeometry( 176, 0, 6 );
+                title = "Right Side Protection Cover";
+
+                break;
+
+            case '16':
+                // Discharge Center Protection Cover - 7
+                bomTexture = loader.load('textures/images/side_dis_cover.png');
+                bomGeometry = new THREE.BoxBufferGeometry( 176, 0, 6 );
+                title = "Discharge Center Protection Cover";
+
+                break;
+
+            case '17':
+                // Protection Cap - 7
+                bomTexture = loader.load('textures/images/protection_cap.png');
+                bomGeometry = new THREE.BoxBufferGeometry( 176, 0, 6 );
+                title = "Protection Cap";
+
+                break;
+
+            case '18':
+                // Nut - 7
+                bomTexture = loader.load('textures/images/nut.png');
+                bomGeometry = new THREE.BoxBufferGeometry( 176, 0, 6 );
+                title = "Nut";
+
+                break;
+
+            case '19':
+                // bolt - 7
+
+                bomTexture = loader.load('textures/images/bolt.png');
+                bomGeometry = new THREE.BoxBufferGeometry( 176, 0, 6 );
+                title = "Left Wedge Bracket";
+
+                break;
+
+            case '20':
+                // Washer - 7
+                bomTexture = loader.load('textures/images/washer.png');
+                bomGeometry = new THREE.BoxBufferGeometry( 176, 0, 6 );
+                title = "Washer";
+
+                break;
+
+            case '21':
+                // Discharge PU Block - 7
+                bomTexture = loader.load('textures/images/dish.png');
+                bomGeometry = new THREE.BoxBufferGeometry( 176, 0, 6 );
+                title = "Discharge PU Block";
+
+                break;
+
+            case '22':
+                // Discharge Fixing Rail - 7
+                bomTexture = loader.load('textures/images/fixing_rail.png');
+                bomGeometry = new THREE.BoxBufferGeometry( 176, 0, 6 );
+                title = "Discharge Fixing Rail";
+
+                break;
+
+            case '23':
+                // Left Wedge Bracket Block - 7
+                bomTexture = loader.load('textures/images/wedge_bracket.png');
+                bomGeometry = new THREE.BoxBufferGeometry( 176, 0, 6 );
+                title = "Left Wedge Bracket";
+
+                break;
+
+            case '24':
+                // Right Wedge Bracket Block - 7
+                bomTexture = loader.load('textures/images/wedge_bracket.png');
+                bomGeometry = new THREE.BoxBufferGeometry( 176, 0, 6 );
+                title = "Right Wedge Bracket Block";
+
+                break;
+
+            default:
+                // undefined catagory - 7px
+                bomTexture = loader.load('textures/images/no_image.png');
+                bomGeometry = new THREE.BoxBufferGeometry( 176, 0, 6 );
+                title = "Undefined";
+
+                break;
+        }
+
+        bomTexture.anisotropy = 16;
+
+        var bomMaterial = new THREE.MeshLambertMaterial( {
+            map: bomTexture,
+            side: THREE.FrontSide,
+            alphaTest: 0.5
+        } );
+
+
+        var bomMesh = new THREE.Mesh(bomGeometry, bomMaterial);
+        bomMesh.position.x = position_x;
+        bomMesh.position.y = position_y;
+        bomMesh.position.z = position_z;
+        bomMesh.receiveShadow = true;
+        bomMesh.castShadow = true;
+
+        boms.push(bomMesh);
+
+        scene.add(bomMesh);
+    }
+
+    function clothHang(){
+        // cloth material
+
+        var loader = new THREE.TextureLoader();
+        var clothTexture = loader.load( 'textures/logos/logo.jpg' );
+        clothTexture.anisotropy = 16;
+
+        var clothMaterial = new THREE.MeshLambertMaterial( {
+            map: clothTexture,
+            side: THREE.DoubleSide,
+            alphaTest: 0.5
+        } );
+
+        // cloth geometry
+
+        clothGeometry = new THREE.ParametricBufferGeometry( clothFunction, cloth.w, cloth.h );
+
+        // cloth mesh
+
+        object = new THREE.Mesh( clothGeometry, clothMaterial );
+        object.position.set( move_x, 0, 0 );
+        object.castShadow = true;
+        scene.add( object );
+
+        object.customDepthMaterial = new THREE.MeshDepthMaterial( {
+            depthPacking: THREE.RGBADepthPacking,
+            map: clothTexture,
+            alphaTest: 0.5
+        } );
+    }
+
+    function ball() {
+        // sphere
+        var ballGeo = new THREE.SphereBufferGeometry( ballSize, 32, 16 );
+
+        var loader = new THREE.TextureLoader();
+        var ballTexture = loader.load( 'textures/logos/logo.png' );
+        ballTexture.anisotropy = 16;
+
+        var ballMaterial = new THREE.MeshLambertMaterial({
+            map: ballTexture,
+            side: THREE.DoubleSide,
+            alphaTest: 0.5
+        });
+
+        sphere = new THREE.Mesh( ballGeo, ballMaterial );
+        sphere.castShadow = true;
+        sphere.receiveShadow = true;
+        sphere.visible = false;
+        scene.add( sphere );
+    }
+
+    function ground(){
+        // ground
+        var loader = new THREE.TextureLoader();
+        var groundTexture = loader.load( 'textures/terrain/bulga.jpg' );
+        groundTexture.wrapS = groundTexture.wrapT = THREE.RepeatWrapping;
+        //groundTexture.repeat.set( 25, 25 );
+        groundTexture.anisotropy = 16;
+        groundTexture.encoding = THREE.sRGBEncoding;
+
+        var groundMaterial = new THREE.MeshLambertMaterial( { map: groundTexture } );
+
+        var mesh = new THREE.Mesh( new THREE.PlaneBufferGeometry( 20000, 20000 ), groundMaterial );
+        mesh.position.y = - 250;
+        mesh.rotation.x = - Math.PI / 2;
+        mesh.receiveShadow = true;
+        scene.add( mesh );
+    }
+
+    function onWindowResize() {
+
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+
+        renderer.setSize( window.innerWidth, window.innerHeight );
+
+    }
+
+    //
+
+    function animate() {
+
+        requestAnimationFrame( animate );
+
+        var time = Date.now();
+
+        var windStrength = Math.cos( time / 7000 ) * 20 + 40;
+
+        windForce.set( Math.sin( time / 2000 ), Math.cos( time / 3000 ), Math.sin( time / 1000 ) );
+        windForce.normalize();
+        windForce.multiplyScalar( windStrength );
+
+        simulate( time );
+        render();
+        stats.update();
+
+    }
+
+    function render() {
+
+        var p = cloth.particles;
+
+        for ( var i = 0, il = p.length; i < il; i ++ ) {
+
+            var v = p[ i ].position;
+
+            clothGeometry.attributes.position.setXYZ( i, v.x, v.y, v.z );
+
+        }
+
+        clothGeometry.attributes.position.needsUpdate = true;
+
+        clothGeometry.computeVertexNormals();
+
+        sphere.position.copy( ballPosition );
+
+        renderer.render( scene, camera );
+
+    }
+
+</script>
+</body>
+</html>
