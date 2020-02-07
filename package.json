@@ -50,8 +50,7 @@
     "url": "cssam/3DPanle.git"
   },
   "scripts": {
-    "server" : "http-server -c-1 -p 8080",
-    "start": "npm run server"
+    "start": "node server.js"
   },
   "version": "0.0.1"
 }
