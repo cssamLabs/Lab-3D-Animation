@@ -31,8 +31,8 @@
       <file leaf-file-name="package.json" pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/node_modules/three/package.json">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="336">
-              <caret line="122" column="27" selection-start-line="122" selection-start-column="4" selection-end-line="122" selection-end-column="27" />
+            <state relative-caret-position="292">
+              <caret line="118" column="165" lean-forward="true" selection-start-line="118" selection-start-column="137" selection-end-line="118" selection-end-column="165" />
             </state>
           </provider>
         </entry>
@@ -40,8 +40,8 @@
       <file leaf-file-name="package.json" pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/package.json">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="381">
-              <caret line="52" column="26" selection-start-line="52" selection-start-column="26" selection-end-line="52" selection-end-column="26" />
+            <state relative-caret-position="396">
+              <caret line="53" column="28" selection-start-line="53" selection-start-column="28" selection-end-line="53" selection-end-column="28" />
             </state>
           </provider>
         </entry>
@@ -84,8 +84,8 @@
     </packageJsonPaths>
   </component>
   <component name="ProjectFrameBounds">
-    <option name="x" value="156" />
-    <option name="y" value="31" />
+    <option name="x" value="108" />
+    <option name="y" value="49" />
     <option name="width" value="1172" />
     <option name="height" value="678" />
   </component>
@@ -113,6 +113,13 @@
               <item name="3DPanel" type="462c0819:PsiDirectoryNode" />
               <item name="node_modules" type="462c0819:PsiDirectoryNode" />
               <item name="three" type="462c0819:PsiDirectoryNode" />
+            </path>
+            <path>
+              <item name="3DPanel" type="b2602c69:ProjectViewProjectNode" />
+              <item name="3DPanel" type="462c0819:PsiDirectoryNode" />
+              <item name="node_modules" type="462c0819:PsiDirectoryNode" />
+              <item name="three" type="462c0819:PsiDirectoryNode" />
+              <item name="build" type="462c0819:PsiDirectoryNode" />
             </path>
           </expand>
           <select />
@@ -200,15 +207,15 @@
       <option name="presentableId" value="Default" />
       <updated>1581110586331</updated>
       <workItem from="1581110590192" duration="404000" />
-      <workItem from="1581113414168" duration="2152000" />
+      <workItem from="1581113414168" duration="2958000" />
     </task>
     <servers />
   </component>
   <component name="TimeTrackingManager">
-    <option name="totallyTimeSpent" value="2556000" />
+    <option name="totallyTimeSpent" value="3362000" />
   </component>
   <component name="ToolWindowManager">
-    <frame x="156" y="31" width="1172" height="678" extended-state="0" />
+    <frame x="108" y="49" width="1172" height="678" extended-state="0" />
     <editor active="true" />
     <layout>
       <window_info anchor="right" id="Palette" order="3" />
@@ -224,7 +231,7 @@
       <window_info anchor="bottom" id="Terminal" order="7" />
       <window_info id="Capture Tool" order="2" />
       <window_info id="Designer" order="2" />
-      <window_info active="true" content_ui="combo" id="Project" order="0" visible="true" weight="0.25" />
+      <window_info active="true" content_ui="combo" id="Project" order="0" visible="true" weight="0.18856655" />
       <window_info anchor="right" id="Database" order="3" />
       <window_info anchor="right" id="Google Cloud Storage" order="3" />
       <window_info id="Learn" order="2" />
@@ -260,17 +267,20 @@
     <entry file="file://$PROJECT_DIR$/package-lock.json">
       <provider selected="true" editor-type-id="text-editor" />
     </entry>
+    <entry file="file://$PROJECT_DIR$/node_modules/three/build/three.module.js">
+      <provider selected="true" editor-type-id="text-editor" />
+    </entry>
     <entry file="file://$PROJECT_DIR$/node_modules/three/package.json">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="336">
-          <caret line="122" column="27" selection-start-line="122" selection-start-column="4" selection-end-line="122" selection-end-column="27" />
+        <state relative-caret-position="292">
+          <caret line="118" column="165" lean-forward="true" selection-start-line="118" selection-start-column="137" selection-end-line="118" selection-end-column="165" />
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/package.json">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="381">
-          <caret line="52" column="26" selection-start-line="52" selection-start-column="26" selection-end-line="52" selection-end-column="26" />
+        <state relative-caret-position="396">
+          <caret line="53" column="28" selection-start-line="53" selection-start-column="28" selection-end-line="53" selection-end-column="28" />
         </state>
       </provider>
     </entry>
