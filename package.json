@@ -1,0 +1,56 @@
+{
+  "name" : "Hibersoft 3D Mine Simulation"
+  "author": {
+    "name": "Chandima Samaraweera"
+  },
+  "bundleDependencies": false,
+  "deprecated": false,
+  "description": "JavaScript 3D Simulation",
+  "devDependencies": {
+    "@types/webgl2": "^0.0.5",
+    "@typescript-eslint/eslint-plugin": "^2.15.0",
+    "@typescript-eslint/parser": "^2.15.0",
+    "concurrently": "^5.0.2",
+    "eslint": "^6.8.0",
+    "eslint-config-mdcs": "^4.2.3",
+    "eslint-plugin-html": "^6.0.0",
+    "failonlyreporter": "^1.0.0",
+    "google-closure-compiler": "20200101.0.0",
+    "http-server": "^0.12.0",
+    "qunit": "^2.9.3",
+    "rollup": "^1.28.0",
+    "rollup-plugin-buble": "^0.19.8",
+    "typescript": "^3.7.4"
+  },
+
+  "eslintConfig": {
+    "parser": "@typescript-eslint/parser",
+    "extends": "mdcs",
+    "plugins": [
+      "html",
+      "@typescript-eslint"
+    ],
+    "rules": {
+      "@typescript-eslint/no-unused-vars": 1,
+      "@typescript-eslint/indent": [
+        "error",
+        "tab",
+        {
+          "SwitchCase": 1
+        }
+      ]
+    }
+  },
+
+  "license": "",
+  "main": "index.html",
+
+  "repository": {
+    "type": "git",
+    "url": "cssam/3DPanle.git"
+  },
+  "scripts": {
+
+  },
+  "version": "0.1"
+}
